@@ -1,13 +1,22 @@
 import React, { useEffect, useRef, useState } from "react";
 
-const images = [
-  "/Sponsors/16.png.jpeg",
-  "/Sponsors/13.jpg",
-  "/Sponsors/14.png.jpeg",
-  "/Sponsors/15.png.jpeg",
-  "/Sponsors/17.jpeg",
-  "/Sponsors/18.png.jpeg",
-  "/Sponsors/20.png.jpeg",
+// Each column has its own set of images
+const columnImageSets = [
+  [
+    "/Sponsors/16.png.jpeg",
+    "/Sponsors/13.jpg",
+    "/Sponsors/14.png.jpeg",
+  ],
+  [
+    "/Sponsors/15.png.jpeg",
+    "/Sponsors/17.jpeg",
+    "/Sponsors/18.png.jpeg",
+  ],
+  [
+    "/Sponsors/20.png.jpeg",
+    "/Sponsors/21.jpg",
+    "/Sponsors/22.png.jpeg",
+  ],
 ];
 
 export default function InfiniteGallery() {
@@ -15,7 +24,7 @@ export default function InfiniteGallery() {
   const touchStartRef = useRef({ x: null, y: null });
   const activeColRef = useRef(1); // default to middle column
 
-  const columns = 3;
+  const columns = columnImageSets.length;
   const [offsets, setOffsets] = useState(Array.from({ length: columns }, () => 0));
 
   // Prevent page scroll while gallery is mounted
@@ -33,19 +42,22 @@ export default function InfiniteGallery() {
   const totalItemHeight = imageHeight + gap;
   const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 800;
 
+  // Calculate how many items we need per column
   const basePerColumnCount = Math.max(
-    images.length,
+    4,
     Math.ceil(viewportHeight / totalItemHeight) + 2
   );
 
-  const baseColumns = Array.from({ length: columns }, (_, colIdx) =>
-    Array.from(
-      { length: basePerColumnCount },
-      (_, i) => images[(i + colIdx) % images.length]
-    )
-  );
+  // Build column arrays
+  const baseColumns = columnImageSets.map((columnImages) => {
+    const repeated = [];
+    for (let i = 0; i < basePerColumnCount; i++) {
+      repeated.push(columnImages[i % columnImages.length]);
+    }
+    return repeated;
+  });
 
-  // Helper to find active column
+  // --- Active column helpers ---
   const getActiveColumnFromX = (x) => {
     const el = containerRef.current;
     if (!el) return activeColRef.current;
@@ -55,7 +67,6 @@ export default function InfiniteGallery() {
     return Math.min(columns - 1, Math.max(0, Math.floor(relX / widthPerCol)));
   };
 
-  // Scroll delta handling
   const applyDelta = (deltaY) => {
     setOffsets((prev) =>
       prev.map((off, i) => {
@@ -66,20 +77,17 @@ export default function InfiniteGallery() {
     );
   };
 
-  // Mouse wheel
+  // --- Event handlers ---
   const onWheel = (event) => {
     event.preventDefault();
     activeColRef.current = getActiveColumnFromX(event.clientX);
-    const sensitivity = 1;
-    applyDelta(event.deltaY * sensitivity);
+    applyDelta(event.deltaY);
   };
 
-  // Mouse move to update active column
   const onMouseMove = (event) => {
     activeColRef.current = getActiveColumnFromX(event.clientX);
   };
 
-  // Touch events
   const onTouchStart = (event) => {
     const t = event.touches[0];
     touchStartRef.current = { x: t.clientX, y: t.clientY };
@@ -101,7 +109,7 @@ export default function InfiniteGallery() {
   };
 
   // --- Tilt + gap correction ---
-  const tiltDeg = -2;
+  const tiltDeg = -2.5;
   const tiltRad = (Math.PI / 180) * Math.abs(tiltDeg);
   const desiredGap = 24; // px (gap-6)
   const adjustedGap = desiredGap / Math.cos(tiltRad);
@@ -132,12 +140,10 @@ export default function InfiniteGallery() {
           const offset = ((raw % columnHeight) + columnHeight) % columnHeight;
 
           return (
-            <div key={colIdx} className="flex-1 overflow-hidden">
+            <div key={colIdx} className="flex-1">
               <div
                 className="flex flex-col gap-8 will-change-transform"
-                style={{
-                  transform: `translateY(${-offset}px)`,
-                }}
+                style={{ transform: `translateY(${-offset}px)` }}
               >
                 {[...colImgs, ...colImgs].map((src, i) => (
                   <div
