@@ -2,30 +2,28 @@ import React, { useEffect, useRef, useState } from "react";
 
 // Each column has its own set of images
 const columnImageSets = [
-  [
-    "/Sponsors/16.png.jpeg",
-    "/Sponsors/13.jpg",
-    "/Sponsors/14.png.jpeg",
-  ],
-  [
-    "/Sponsors/15.png.jpeg",
-    "/Sponsors/17.jpeg",
-    "/Sponsors/18.png.jpeg",
-  ],
-  [
-    "/Sponsors/20.png.jpeg",
-    "/Sponsors/21.jpg",
-    "/Sponsors/22.png.jpeg",
-  ],
+  ["/Sponsors/16.png.jpeg", "/Sponsors/13.jpg", "/Sponsors/14.png.jpeg"],
+  ["/Sponsors/15.png.jpeg", "/Sponsors/17.jpeg", "/Sponsors/18.png.jpeg"],
+  ["/Sponsors/20.png.jpeg", "/Sponsors/21.jpg", "/Sponsors/22.png.jpeg"],
 ];
 
 export default function InfiniteGallery() {
   const containerRef = useRef(null);
   const touchStartRef = useRef({ x: null, y: null });
-  const activeColRef = useRef(1); // default to middle column
+  const activeColRef = useRef(0);
 
-  const columns = columnImageSets.length;
-  const [offsets, setOffsets] = useState(Array.from({ length: columns }, () => 0));
+  const [isMobile, setIsMobile] = useState(false);
+  const [offsets, setOffsets] = useState([0]); // at least one column
+
+  // Detect screen size
+  useEffect(() => {
+    const checkSize = () => {
+      setIsMobile(window.innerWidth < 640); // Tailwind "md" breakpoint
+    };
+    checkSize();
+    window.addEventListener("resize", checkSize);
+    return () => window.removeEventListener("resize", checkSize);
+  }, []);
 
   // Prevent page scroll while gallery is mounted
   useEffect(() => {
@@ -42,20 +40,37 @@ export default function InfiniteGallery() {
   const totalItemHeight = imageHeight + gap;
   const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 800;
 
-  // Calculate how many items we need per column
+  // Build column arrays
   const basePerColumnCount = Math.max(
     4,
     Math.ceil(viewportHeight / totalItemHeight) + 2
   );
 
-  // Build column arrays
-  const baseColumns = columnImageSets.map((columnImages) => {
-    const repeated = [];
-    for (let i = 0; i < basePerColumnCount; i++) {
-      repeated.push(columnImages[i % columnImages.length]);
+  const baseColumns = (() => {
+    if (isMobile) {
+      // Merge all into one big column
+      const allImgs = columnImageSets.flat();
+      const repeated = [];
+      for (let i = 0; i < basePerColumnCount; i++) {
+        repeated.push(allImgs[i % allImgs.length]);
+      }
+      return [repeated];
+    } else {
+      // Normal multi-column
+      return columnImageSets.map((columnImages) => {
+        const repeated = [];
+        for (let i = 0; i < basePerColumnCount; i++) {
+          repeated.push(columnImages[i % columnImages.length]);
+        }
+        return repeated;
+      });
     }
-    return repeated;
-  });
+  })();
+
+  // Sync offsets when switching mobile/desktop
+  useEffect(() => {
+    setOffsets(Array.from({ length: baseColumns.length }, () => 0));
+  }, [isMobile]);
 
   // --- Active column helpers ---
   const getActiveColumnFromX = (x) => {
@@ -63,15 +78,18 @@ export default function InfiniteGallery() {
     if (!el) return activeColRef.current;
     const rect = el.getBoundingClientRect();
     const relX = Math.min(Math.max(x - rect.left, 0), rect.width - 1);
-    const widthPerCol = rect.width / columns;
-    return Math.min(columns - 1, Math.max(0, Math.floor(relX / widthPerCol)));
+    const widthPerCol = rect.width / baseColumns.length;
+    return Math.min(
+      baseColumns.length - 1,
+      Math.max(0, Math.floor(relX / widthPerCol))
+    );
   };
 
   const applyDelta = (deltaY) => {
     setOffsets((prev) =>
       prev.map((off, i) => {
         const dist = Math.abs(i - activeColRef.current);
-        const factor = Math.max(0.2, 1 - 0.4 * dist); // 1.0, 0.6, 0.2
+        const factor = isMobile ? 1 : Math.max(0.3, 1 - 0.4 * dist); // full scroll on mobile
         return off + deltaY * factor;
       })
     );
@@ -85,7 +103,9 @@ export default function InfiniteGallery() {
   };
 
   const onMouseMove = (event) => {
-    activeColRef.current = getActiveColumnFromX(event.clientX);
+    if (!isMobile) {
+      activeColRef.current = getActiveColumnFromX(event.clientX);
+    }
   };
 
   const onTouchStart = (event) => {
@@ -97,7 +117,7 @@ export default function InfiniteGallery() {
   const onTouchMove = (event) => {
     const t = event.touches[0];
     const start = touchStartRef.current;
-    if (start == null || start.y == null) return;
+    if (!start || start.y == null) return;
     const deltaY = start.y - t.clientY;
     activeColRef.current = getActiveColumnFromX(t.clientX);
     applyDelta(deltaY);
@@ -109,7 +129,7 @@ export default function InfiniteGallery() {
   };
 
   // --- Tilt + gap correction ---
-  const tiltDeg = -2.5;
+  const tiltDeg = isMobile ? 0 : -2.5;
   const tiltRad = (Math.PI / 180) * Math.abs(tiltDeg);
   const desiredGap = 24; // px (gap-6)
   const adjustedGap = desiredGap / Math.cos(tiltRad);
@@ -125,7 +145,6 @@ export default function InfiniteGallery() {
       onTouchEnd={onTouchEnd}
       style={{ touchAction: "none" }}
     >
-      {/* Tilt the entire group */}
       <div
         className="flex p-6 h-full will-change-transform"
         style={{
@@ -153,7 +172,7 @@ export default function InfiniteGallery() {
                     <img
                       src={src}
                       alt=""
-                      className="w-full h-full object-cover object-top rounded-xl"
+                      className="w-full h-full object-cover sm:object-top rounded-xl"
                     />
                   </div>
                 ))}
